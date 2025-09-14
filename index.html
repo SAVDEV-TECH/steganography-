@@ -13,6 +13,17 @@
             <div class="logo">
                 <i class="fas fa-lock"></i>
                 SecureStego
+                <nav>
+                    <div class="nav-left">
+                      <span id="user-account-badge" class="account-badge" style="display:none;">Not logged in</span>
+                    </div>
+                    <div class="nav-right">
+                      <button id="logout-btn" class="nav-btn" style="display:none;">
+                        <i class="fas fa-sign-out-alt"></i> Logout
+                      </button>
+                    </div>
+                  </nav>
+                  
             </div>
             <p>Secure Image Steganography for Financial Transactions</p>
         </header>
@@ -21,8 +32,8 @@
             <button class="nav-btn active" data-target="home">Home</button>
             <button class="nav-btn" data-target="login">Login</button>
             <button class="nav-btn" data-target="register">Register</button>
-            <button class="nav-btn" data-target="transaction">Transactions</button>
-            <button class="nav-btn" data-target="stego">Steganography</button>
+            <button class="nav-btn" data-target="transaction" id="transaction-nav">Transactions</button>
+            <button class="nav-btn" data-target="stego" id="stego-nav">Steganography</button>
         </nav>
         
         <div class="content">
@@ -61,6 +72,10 @@
                 <h2>Login to Your Account</h2>
                 <div class="form-container">
                     <div class="form-group">
+                        <label for="login-email">EMAIL</label>
+                        <input type="email" id="login-email" placeholder="Enter your Email">
+                    </div>
+                    <div class="form-group">
                         <label for="login-account">Account Number</label>
                         <input type="text" id="login-account" placeholder="Enter your account number">
                     </div>
@@ -69,6 +84,10 @@
                         <input type="password" id="login-pin" placeholder="Enter your PIN">
                     </div>
                     <button class="btn" id="login-btn">Login</button>
+                    <div id="login-loading" style="display:none; text-align:center; margin-top:10px;">
+                        <div class="spinner"></div>
+                        <p>logging in</p>
+                      </div>
                     <p style="text-align: center; margin-top: 15px;">
                         Don't have an account? <a href="#" onclick="showModule('register')">Register here</a>
                     </p>
@@ -100,6 +119,11 @@
                         <input type="password" id="register-password" placeholder="Create a 4-digit PIN">
                     </div>
                     <button class="btn" id="register-btn">Register Account</button>
+                    <div id="register-loading" style="display:none; text-align:center; margin-top:10px;">
+                        <div class="spinner"></div>
+                        <p>Creating account...</p>
+                      </div>
+                      
                     
                     <div class="account-info" id="account-info" style="display: none;">
                         <h3>Account Created Successfully!</h3>

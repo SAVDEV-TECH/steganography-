@@ -87,32 +87,49 @@ auth.onAuthStateChanged(async (user) => {
 });
 
 // Update UI for logged in user
-function updateUIForLoggedInUser() {
+ function updateUIForLoggedInUser() {
   // Show protected navigation items
   document.getElementById('transaction-nav').style.display = 'block';
   document.getElementById('stego-nav').style.display = 'block';
-  
-  // Update account badge
+
+  const badge = document.getElementById('user-account-badge');
+  const logoutBtn = document.getElementById('logout-btn');
+
   if (userData) {
-    document.getElementById('user-account-badge').textContent = userData.accountNumber;
+    badge.textContent = `Account: ${userData.accountNumber}`;
+    badge.style.display = "inline-block"; // show badge
   }
-  
+
+  if (logoutBtn) {
+    logoutBtn.style.display = "inline-block"; // show logout button
+  }
+
   // Switch to transaction view after login
   showModule('transaction');
 }
 
 // Update UI for logged out user
-function updateUIForLoggedOutUser() {
+ function updateUIForLoggedOutUser() {
   // Hide protected navigation items
   document.getElementById('transaction-nav').style.display = 'none';
   document.getElementById('stego-nav').style.display = 'none';
-  
-  // Clear account badge
-  document.getElementById('user-account-badge').textContent = '';
-  
+
+  const badge = document.getElementById('user-account-badge');
+  const logoutBtn = document.getElementById('logout-btn');
+
+  if (badge) {
+    badge.textContent = "Not logged in";
+    badge.style.display = "none"; // hide badge
+  }
+
+  if (logoutBtn) {
+    logoutBtn.style.display = "none"; // hide logout button
+  }
+
   // Switch to home view after logout
   showModule('home');
 }
+
 
 // Navigation functionality
 document.querySelectorAll('.nav-btn').forEach(button => {
@@ -204,26 +221,35 @@ document.getElementById('stego-image').addEventListener('change', function(e) {
 
 // Registration functionality
 document.getElementById("register-btn").addEventListener("click", async () => {
-  const fullName = document.getElementById("fullname").value;
-  const email = document.getElementById("register-email").value;
-  const password = document.getElementById("register-password").value;
-  const initialDeposit = document.getElementById("initial-deposit").value;
+  const fullName = document.getElementById("fullname").value.trim();
+  const email = document.getElementById("register-email").value.trim();
+  const password = document.getElementById("register-password").value.trim();
+  const phone = document.getElementById("phone").value.trim();
+  const initialDeposit = document.getElementById("initial-deposit").value.trim();
 
-  if (fullName && email && password && initialDeposit) {
+  const loadingEl = document.getElementById("register-loading");
+  const registerBtn = document.getElementById("register-btn");
+
+  if (fullName && email && password && phone && initialDeposit) {
     try {
-      // Create Firebase user
+      // Show loading
+      loadingEl.style.display = "block";
+      registerBtn.disabled = true;
+
+      // Create Firebase Auth user with email + PIN (password)
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
 
-      // Generate random account number
+      // Generate random 10-digit account number
       const accountNumber = Math.floor(1000000000 + Math.random() * 9000000000).toString();
 
-      // Save user data in Firestore
+      // Prepare user data for Firestore
       const userData = {
         uid: user.uid,
         accountNumber,
         fullName,
         email,
+        phone,
         balance: parseFloat(initialDeposit),
         transactions: [{
           date: new Date().toLocaleDateString(),
@@ -233,53 +259,101 @@ document.getElementById("register-btn").addEventListener("click", async () => {
         }]
       };
 
+      // Save in Firestore
       await setDoc(doc(db, "users", user.uid), userData);
 
-      // Show account info
+      // Show generated account details
       document.getElementById("generated-account").textContent = accountNumber;
       document.getElementById("initial-balance").textContent = initialDeposit;
       document.getElementById("account-info").style.display = "block";
 
-      showSecurityAlert("Account created successfully!", false);
+      showSecurityAlert("✅ Account created successfully!", false);
     } catch (error) {
+      console.error(error);
       showSecurityAlert("Error: " + error.message);
+    } finally {
+      // Hide loading
+      loadingEl.style.display = "none";
+      registerBtn.disabled = false;
     }
   } else {
-    showSecurityAlert("Please fill all fields");
+    showSecurityAlert("⚠️ Please fill all fields");
   }
 });
 
-// Login functionality
-document.getElementById('login-btn').addEventListener('click', async function() {
-  const email = document.getElementById('login-email').value;
-  const password = document.getElementById('login-pin').value;
 
-  if (email && password) {
+ 
+ // Login functionality
+ document.getElementById('login-btn').addEventListener('click', async function() {
+  const email = document.getElementById('login-email').value.trim();   // email
+  const password = document.getElementById('login-pin').value.trim(); // password/PIN
+  const accountNumber = document.getElementById('login-account').value.trim(); // account number
+  const loadingEl = document.getElementById('login-loading');
+  const logBtn = document.getElementById('login-btn');
+  const logoutBtn = document.getElementById('logout-btn');
+  const badge = document.getElementById('user-account-badge');
+
+  if (email && password && accountNumber) {
     try {
-      // Sign in Firebase user
+      // Show spinner
+      loadingEl.style.display = "block";
+      logBtn.disabled = true;
+
+      // Firebase sign in
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
 
-      // Fetch data from Firestore
+      // Fetch Firestore user data
       const docRef = doc(db, "users", user.uid);
       const docSnap = await getDoc(docRef);
 
       if (docSnap.exists()) {
         const userData = docSnap.data();
-        showSecurityAlert(`Login successful! Welcome ${userData.fullName}`, false);
-        showModule('transaction');
+
+        // Verify account number
+        if (userData.accountNumber === accountNumber) {
+          // Save globally
+          window.userData = userData;
+
+          // Update badge
+          if (badge) {
+            badge.textContent = `Account: ${userData.accountNumber}`;
+            badge.style.display = "inline-block";
+          }
+
+          // Show logout button
+          if (logoutBtn) {
+            logoutBtn.style.display = "inline-block";
+          }
+
+          // Success alert
+          showSecurityAlert(`Login successful! Welcome ${userData.fullName}`, false);
+
+          // Switch to transaction module + load transactions
+          showModule('transaction');
+          loadUserTransactions(user.uid);
+        } else {
+          showSecurityAlert("Invalid account number. Access denied!");
+        }
       } else {
         showSecurityAlert("No user data found!");
       }
     } catch (error) {
-      showSecurityAlert("DANGER! UNKNOWN USER TRYING TO HACK THIS FILE");
+      console.error(error);
+      showSecurityAlert("Login failed. Please check your details.");
+    } finally {
+      // Stop spinner
+      loadingEl.style.display = "none";
+      logBtn.disabled = false;
     }
   } else {
-    showSecurityAlert('Please enter email and password');
+    showSecurityAlert('Please enter email, password, and account number');
   }
 });
 
+
 // Transaction functionality
+
 document.getElementById('transaction-btn').addEventListener('click', async function() {
   if (!currentUser) {
     showSecurityAlert("DANGER! UNAUTHORIZED ACCESS ATTEMPT");
@@ -288,104 +362,103 @@ document.getElementById('transaction-btn').addEventListener('click', async funct
   }
 
   const transactionType = document.getElementById('transaction-type').value;
-  const amount = document.getElementById('amount').value;
+  const amount = parseFloat(document.getElementById('amount').value);
   const recipient = document.getElementById('recipient').value;
-  
+
+  console.log("Transaction type:", transactionType);
+  console.log("Amount:", amount);
+  console.log("Recipient:", recipient);
+
   try {
     const docRef = doc(db, "users", currentUser.uid);
     const docSnap = await getDoc(docRef);
-    
+
     if (!docSnap.exists()) {
       showSecurityAlert("User data not found!");
       return;
     }
-    
+
     const userData = docSnap.data();
+    console.log("Fetched user data:", userData);
+
     let message = '';
-    let updatedData = {...userData};
-    
+
     if (transactionType === 'balance') {
       message = `Your account balance is: $${userData.balance}`;
-    } else if (transactionType === 'deposit') {
-      updatedData.balance += parseFloat(amount);
-      updatedData.transactions = arrayUnion({
-        date: new Date().toLocaleDateString(),
-        type: 'Deposit',
-        amount: parseFloat(amount),
-        balance: updatedData.balance
-      });
-      message = `Successfully deposited $${amount}. New balance: $${updatedData.balance}`;
-    } else if (transactionType === 'withdraw') {
-      if (userData.balance >= parseFloat(amount)) {
-        updatedData.balance -= parseFloat(amount);
-        updatedData.transactions = arrayUnion({
+    } 
+    else if (transactionType === 'deposit') {
+      const newBalance = userData.balance + amount;
+      console.log("Depositing, new balance:", newBalance);
+      await updateDoc(docRef, {
+        balance: newBalance,
+        transactions: arrayUnion({
           date: new Date().toLocaleDateString(),
-          type: 'Withdrawal',
-          amount: parseFloat(amount),
-          balance: updatedData.balance
+          type: 'Deposit',
+          amount: amount,
+          balance: newBalance
+        })
+      });
+      message = `Successfully deposited $${amount}. New balance: $${newBalance}`;
+    } 
+    else if (transactionType === 'withdraw') {
+      if (userData.balance >= amount) {
+        const newBalance = userData.balance - amount;
+        console.log("Withdrawing, new balance:", newBalance);
+        await updateDoc(docRef, {
+          balance: newBalance,
+          transactions: arrayUnion({
+            date: new Date().toLocaleDateString(),
+            type: 'Withdrawal',
+            amount: amount,
+            balance: newBalance
+          })
         });
-        message = `Successfully withdrew $${amount}. New balance: $${updatedData.balance}`;
+        message = `Successfully withdrew $${amount}. New balance: $${newBalance}`;
       } else {
         showSecurityAlert('Insufficient funds');
         return;
       }
-    } else if (transactionType === 'transfer') {
-      if (userData.balance >= parseFloat(amount)) {
-        // In a real app, you would also update the recipient's account
-        updatedData.balance -= parseFloat(amount);
-        updatedData.transactions = arrayUnion({
-          date: new Date().toLocaleDateString(),
-          type: 'Transfer',
-          amount: parseFloat(amount),
-          balance: updatedData.balance,
-          recipient: recipient
+    } 
+    else if (transactionType === 'transfer') {
+      if (userData.balance >= amount) {
+        const newBalance = userData.balance - amount;
+        console.log("Transferring, new balance:", newBalance);
+        await updateDoc(docRef, {
+          balance: newBalance,
+          transactions: arrayUnion({
+            date: new Date().toLocaleDateString(),
+            type: 'Transfer',
+            amount: amount,
+            balance: newBalance,
+            recipient: recipient
+          })
         });
-        message = `Successfully transferred $${amount} to account ${recipient}. New balance: $${updatedData.balance}`;
+        message = `Successfully transferred $${amount} to account ${recipient}. New balance: $${newBalance}`;
       } else {
         showSecurityAlert('Insufficient funds');
         return;
       }
     }
-    
-    // Save updated data to Firestore
-    await updateDoc(docRef, updatedData);
-    
-    // Update transaction history
+
+    // Fetch fresh transactions after update
+    const updatedSnap = await getDoc(docRef);
+    const updatedData = updatedSnap.data();
+    console.log("Updated user data:", updatedData);
+
     updateTransactionHistory(updatedData.transactions);
-    
-    // Show result
+
     document.getElementById('transaction-details').textContent = message;
     document.getElementById('transaction-result').style.display = 'block';
-    
     showSecurityAlert("Transaction completed successfully!", false);
+
   } catch (error) {
+    console.error("Transaction error:", error);
     showSecurityAlert("Transaction error: " + error.message);
   }
 });
 
-function updateTransactionHistory(transactions) {
-  const tableBody = document.getElementById('transaction-table');
-  tableBody.innerHTML = '';
-  
-  if (transactions.length === 0) {
-    tableBody.innerHTML = '<tr><td colspan="4" style="text-align: center;">No transactions yet</td></tr>';
-    return;
-  }
-  
-  // Show latest 5 transactions
-  const recentTransactions = transactions.slice(-5).reverse();
-  
-  recentTransactions.forEach(transaction => {
-    const row = document.createElement('tr');
-    row.innerHTML = `
-      <td>${transaction.date}</td>
-      <td>${transaction.type}</td>
-      <td>$${transaction.amount}</td>
-      <td>$${transaction.balance}</td>
-    `;
-    tableBody.appendChild(row);
-  });
-}
+
+ 
 
 // Encryption function using Web Crypto API
 async function encryptMessage(message, password) {
@@ -704,46 +777,84 @@ function binaryToText(binary) {
 }
 
 // Logout functionality
-function setupLogout() {
-  const logoutBtn = document.createElement('button');
-  logoutBtn.className = 'nav-btn';
-  logoutBtn.innerHTML = '<i class="fas fa-sign-out-alt"></i> Logout';
-  logoutBtn.addEventListener('click', async () => {
-    try {
-      await signOut(auth);
-      showSecurityAlert("Logged out successfully", false);
-    } catch (error) {
-      showSecurityAlert("Error during logout: " + error.message);
-    }
-  });
+// function setupLogout() {
+//   const logoutBtn = document.createElement('button');
+//   logoutBtn.className = 'nav-btn';
+//   logoutBtn.innerHTML = '<i class="fas fa-sign-out-alt"></i> Logout';
+//   logoutBtn.addEventListener('click', async () => {
+//     try {
+//       await signOut(auth);
+//       showSecurityAlert("Logged out successfully", false);
+//     } catch (error) {
+//       showSecurityAlert("Error during logout: " + error.message);
+//     }
+//   });
   
-  document.querySelector('nav').appendChild(logoutBtn);
+//   document.querySelector('nav').appendChild(logoutBtn);
+// }
+
+async function loadUserTransactions(uid) {
+  const docRef = doc(db, "users", uid);
+  const docSnap = await getDoc(docRef);
+  if (docSnap.exists()) {
+    updateTransactionHistory(docSnap.data().transactions || []);
+  }
 }
 
-// Initialize with some demo transaction data if none exists
-window.addEventListener('load', function() {
-  setupLogout();
   
-  const accountNumber = '1234567890';
-  if (!localStorage.getItem(accountNumber)) {
-    const demoData = {
-      accountNumber: accountNumber,
-      fullName: 'Demo User',
-      balance: 5000,
-      transactions: [
-        {
-          date: new Date().toLocaleDateString(),
-          type: 'Deposit',
-          amount: 5000,
-          balance: 5000
-        }
-      ]
-    };
-    localStorage.setItem(accountNumber, JSON.stringify(demoData));
-    updateTransactionHistory(demoData.transactions);
-  } else {
-    const userData = JSON.parse(localStorage.getItem(accountNumber));
-    updateTransactionHistory(userData.transactions);
+
+function updateTransactionHistory(transactions) {
+  const tableBody = document.getElementById('transaction-table');
+  tableBody.innerHTML = '';
+
+  if (!transactions || transactions.length === 0) {
+    tableBody.innerHTML = '<tr><td colspan="4" style="text-align: center;">No transactions yet</td></tr>';
+    return;
+  }
+
+  // Show latest 5 transactions (reverse order: newest first)
+  const recentTransactions = transactions.slice(-5).reverse();
+
+  recentTransactions.forEach(transaction => {
+    const row = document.createElement('tr');
+    row.innerHTML = `
+      <td>${transaction.date}</td>
+      <td>${transaction.type}</td>
+      <td>$${transaction.amount}</td>
+      <td>$${transaction.balance}</td>
+    `;
+    tableBody.appendChild(row);
+  });
+}
+
+
+// setupLogout()
+
+document.getElementById('logout-btn').addEventListener('click', async () => {
+  try {
+    await signOut(auth);
+
+    // Clear globals
+    window.currentUser = null;
+    window.userData = null;
+
+    // Reset UI
+    const badge = document.getElementById('user-account-badge');
+    const logoutBtn = document.getElementById('logout-btn');
+
+    if (badge) {
+      badge.textContent="Not logged in";
+      badge.style.display="none";  // hide badge completely
+    }
+
+    if (logoutBtn) {
+      logoutBtn.style.display="none"; // hide logout button
+    }
+
+    showSecurityAlert("Logged out successfully", false);
+    showModule('login');
+  } catch (error) {
+    showSecurityAlert("Error during logout: " + error.message);
   }
 });
 
